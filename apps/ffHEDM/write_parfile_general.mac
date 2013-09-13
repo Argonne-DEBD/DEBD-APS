@@ -1,0 +1,230 @@
+"""
+def write_parfile_old(detname, imgnr, imgprefix, motname, startpos, endpos) '{
+        #takes: detector name, img number, img prefix
+        #       motor name, startpos, endpos 
+        #detname = "$1"
+        #imgnr = $2
+        #imgprefix=$3
+        #motname = $4
+        #startpos = $5
+        #endpos = $6
+
+        get_angles
+
+        #read out intensity loggin to readable names
+
+        #print to the par file.
+        
+        on(parfile);offt
+
+        # CMU Nov 2008
+        #temp=epics_get( "1id:LS340:TC1:Control" );
+        #temp=epics_get( "1id:D1Ch1_calc.VAL" );
+        #p date(),detname,A[samXb],A[samYb],A[samZb],A[stageZ],motname,startpos,endpos,OSC["exposure_time"],imgprefix,imgnr,S[ic6b],S[ic1b],temp
+        p date(), detname, A[samXb],A[samYb],A[samZb],A[stageZ],motname,startpos,endpos,OSC["exposure_time"],imgprefix,imgnr,S[ic6b],S[ic1b],A[owisY]
+        ont;off(parfile)
+         
+
+}'
+
+def write_parfile_fast_BHutch(detname, imgnr, imgprefix, motname, startpos, endpos) '{
+    # For B-hutch NF experiments
+    
+    global OSC
+    global moncnt trcnt Emoncnt Etrcnt
+    global timestamp
+    global parfile fastparfile
+    local iframe filenum icnt enddate
+    
+    get_angles
+    sleep(0.1)
+    
+    # One line for each frame
+    on(parfile);offt
+    enddate=date()
+    filenum = imgnr-OSC["nframes"]+1
+    for (iframe=0; iframe<OSC["nframes"]; iframe++) {
+        filenum = imgnr-OSC["nframes"]+1+iframe
+        icnt=OSC["nframes"]-1-iframe # Reverse order
+        printf("%s %s %f %f %f %f %s %f %f %f %s %d %12f %12f %15.8f\n", enddate, detname, A[DetZ], A[stageY], A[owisY], A[samYb], motname, startpos,\
+          endpos, OSC["exposure_time"], imgprefix, filenum, moncnt[icnt], trcnt[icnt], timestamp[icnt])
+          
+          # We may put here the current calculated omega position of a frame
+    }       
+    ont;off(parfile)
+    
+    # One line for each scan
+    on(fastparfile);offt
+    printf("%s %s %8f %8f %8f %8f %s %g %g %g %s %5d %5d %12f %12f %12f %12f\n",\
+      enddate, detname, A[DetZ], A[stageY], A[owisY], A[samYb], motname,\
+      startpos, endpos, OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+      S[ic1b]/S[sec], S[ic3b]/S[sec], S[ic5b]/S[sec], S[ic6b]/S[sec])
+    ont;off(fastparfile)
+  
+}'
+
+def write_parfile_fast_NF(detname, imgnr, imgprefix, motname, startpos, endpos) '{
+    # For E-hutch NF/FF experiments
+    
+    global OSC
+    global moncnt trcnt Emoncnt Etrcnt
+    global timestamp
+    global parfile fastparfile
+    local iframe filenum icnt enddate
+    
+    get_angles
+    sleep(0.1)
+    
+    # One line for each frame
+    on(parfile);offt
+    enddate=date()
+    filenum = imgnr-OSC["nframes"]+1
+    for (iframe=0; iframe<OSC["nframes"]; iframe++) {
+        filenum = imgnr-OSC["nframes"]+1+iframe
+        icnt=OSC["nframes"]-1-iframe # Reverse order
+        printf("%s %s %8f %8f %8f %8f %s %8f %8f %5f %s %05d %12f %12f %12f %12f %15.8f\n",\
+          enddate, detname, A[DetZ], A[DetX], A[mtsX], A[mtsY], motname, startpos,\
+          endpos, OSC["exposure_time"], imgprefix, filenum, moncnt[icnt], trcnt[icnt],\
+          Emoncnt[icnt], Etrcnt[icnt], timestamp[icnt])
+          
+          # We may put here the current calculated omega position of a frame
+    }       
+    ont;off(parfile)
+    
+    # One line for each scan
+    on(fastparfile);offt
+    S[sec]
+    printf("%s %s %8f %8f %8f %8f %s %5g %5g %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f\n",\
+      enddate, detname, A[DetZ], A[DetX], A[mtsX], A[mtsY], motname,\
+      startpos, endpos, OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+      S[ic1b]/S[sec], S[ic3b]/S[sec], S[ic5b]/S[sec], S[ic6b]/S[sec], S[ic2c]/S[sec], S[ic3c]/S[sec], S[ic4c]/S[sec])
+    ont;off(fastparfile)
+  
+}'
+"""
+
+def write_parfile_fast(detname, imgnr, imgprefix, motname, startpos, endpos) '{
+    # For E-hutch NF/FF experiments
+    
+    global OSC
+    global moncnt trcnt Emoncnt Etrcnt
+    global cntticks  # In 10 MHz ticks, we convert it to seconds
+    global timestamp
+    global parfile fastparfile
+    local iframe filenum icnt enddate
+    local icsec
+    local omegapos
+    
+    get_angles
+    sleep(0.1)
+    
+    # One line for each frame
+    on(parfile);offt
+    enddate=date()
+    filenum = imgnr-OSC["nframes"]+1
+    for (iframe=0; iframe<OSC["nframes"]; iframe++) {
+        filenum = imgnr-OSC["nframes"]+1+iframe
+        icnt=OSC["nframes"]-1-iframe # Reverse order
+        omegapos=startpos+(endpos-startpos)/OSC["nframes"]*iframe
+#        printf("%s %s %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %15.8f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[mtsX], A[mtsY], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], timestamp[icnt])
+# For AFRL PUP E hutch
+#        printf("%s %s %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[mtsX], A[mtsY], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/10e6, timestamp[icnt])
+# Aero/hexFly E-hutch
+#        printf("%s %s %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[aeroXE], A[samYE], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/10e6, timestamp[icnt])
+# birkedal_mar13, Okuniewski_Apr13, Suter_Apr13
+#        printf("%s %s %8f %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f %12f %12f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[aeroXE], S[fedrl], A[samYE], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/50e6, timestamp[icnt], S[bpEus], S[bpEds])
+# Oddershede_Jun13
+#        printf("%s %s %8f %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f %12f %12f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[aeroXE], S[fedrl], A[samYE], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/50e6, timestamp[icnt], S[bpEus], S[bpEds])
+
+# Bieler_July13 (per frame)
+#        printf("%s %s %8f %8f %8f %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f %12f %12f\n",\
+#          enddate, detname, A[DetZ], A[DetX], A[aeroXE], S[fedrl], A[samYE], A[samXE], A[samZE], motname, startpos,\
+#          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+#          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt],\
+#          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/50e6, timestamp[icnt], S[bpEus], S[bpEds])
+
+# Suter_July13 (per frame)
+        printf("%s %s %8f %8f %8f %8f %8f %8f %8f %8f %s %8f %8f %8f %5f %s %05d %05d %04d %12f %12f %12f %12f %12f %15.8f\n",\
+          enddate, detname, A[DetZ], A[DetX], A[nf_YE], A[aeroXE], S[fedrl], A[samYE], A[samXE], A[samZE], motname, startpos,\
+          endpos, omegapos, OSC["exposure_time"], imgprefix, filenum, \
+          OSC["first_frame_number"], iframe+1, moncnt[icnt], trcnt[icnt], \
+          Emoncnt[icnt], Etrcnt[icnt], cntticks[icnt]/50e6, timestamp[icnt])
+          
+          # We should put in the elapsed time based on the scaler trigger and 10MHz clock
+          # We may put here the current calculated omega position of a frame
+    }       
+    ont;off(parfile)
+    
+    # One line for each scan
+    on(fastparfile);offt
+    icsec=S[sec]
+# For AFRL PUP E-hutch
+#    printf("%s %s %8f %8f %8f %8f %s %5g %5g %4d %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f %8f\n",\
+#      enddate, detname, A[DetZ], A[DetX], A[mtsX], A[mtsY], motname,\
+#      startpos, endpos, OSC["nframes"], OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+#      S[ic1b]/icsec, S[ic3b]/icsec, S[ic5b]/icsec, S[ic6b]/icsec, S[ic2c]/icsec, S[ic3c]/icsec, S[ic4c]/icsec, icsec)
+# Aero/hexFly E-hutch
+#    printf("%s %s %8f %8f %8f %8f %s %5g %5g %4d %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f %8f\n",\
+#      enddate, detname, A[DetZ], A[DetX], A[aeroXE], A[samYE], motname,\
+#      startpos, endpos, OSC["nframes"], OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+#      S[ic3b]/icsec, S[ic5b]/icsec, S[ic3e]/icsec, S[ic4e]/icsec, S[ic1e]/icsec, S[ic2e]/icsec, S[ic5e]/icsec, S[ic6e]/icsec, icsec)
+# birkedal_mar13, Okuniewski_Apr13, Suter_Apr13
+#    printf("%s %s %8f %8f %8f %8f %s %5g %5g %4d %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f %8f\n",\
+#      enddate, detname, A[DetZ], A[DetX], A[aeroXE], A[samYE], motname,\
+#      startpos, endpos, OSC["nframes"], OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+#      S[ic1e]/icsec, S[ic2e]/icsec, S[ic3e]/icsec, S[ic4e]/icsec, S[ic5e]/icsec, S[ic6e]/icsec, S[fedrl], icsec)
+# Oddershede_Jun13
+#    printf("%s %s %8f %8f %8f %8f %s %5g %5g %4d %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f %8f %8f %8f %8f\n",\
+#      enddate, detname, A[DetZ], A[DetX], A[aeroXE], A[samYE], motname,\
+#      startpos, endpos, OSC["nframes"], OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+#      S[ic1e]/icsec, S[ic2e]/icsec, S[ic3e]/icsec, S[ic4e]/icsec, S[ic5e]/icsec, S[ic6e]/icsec, S[fedrl], icsec, getHVrbv, getHVfbv, getHVcalcv)
+
+# Bieler_Jul13 (per scan)
+    local displenc loadcell stress
+    #displenc=epics_get("1ide:Fed:s1:probe_2")  # Federal Encoder on the load frame
+    loadcell=epics_get("1ide:D1Ch8_raw.VAL") # Load cell voltage in Volts (OWYS)
+    stress=epics_get("1ide:D1Ch8_calc.VAL") # Load in lbf on the load cell
+    tensionmot=A[owys] # tension motor position
+    printf("%s %s %8f %8f %8f %8f %8f %8f %8f %s %5g %5g %4d %5g %s %05d %05d %12f %12f %12f %12f %12f %12f %12f %8f %8f %8f %8f %15.8f %12f %12f %8f %8f\n",\
+      enddate, detname, A[DetZ], A[DetX], A[nf_YE], A[aeroXE], A[samYE], A[samXE], A[samZE], motname,\
+      startpos, endpos, OSC["nframes"], OSC["exposure_time"], imgprefix, OSC["first_frame_number"], imgnr,\
+      S[ic1e]/icsec, S[ic2e]/icsec, S[ic3e]/icsec, S[ic4e]/icsec, S[ic5e]/icsec, S[ic6e]/icsec, \
+      S[fedrl], icsec, displenc, loadcell, stress, tensionmot, S[bpEus], S[bpEds], A[foil], S[fotr], S[bposC])
+
+    ont;off(fastparfile)
+  
+}'
+
+
+#def write_parfile_fast(a,b,c,d,e,f) '{
+#    write_parfile_fast_BHutch(a,b,c,d,e,f)
+#}'
+#def write_parfile_fast(a,b,c,d,e,f) '{
+#    write_parfile_fast_EHutch_FF(a,b,c,d,e,f)
+#}'
+#def write_parfile_fast(a,b,c,d,e,f) '{
+#    write_parfile_fast_EHutch_NF(a,b,c,d,e,f)
+#}'
+
+#def write_parfile_fast 'write_parfile_fast_EHutch'
+
